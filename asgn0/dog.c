@@ -33,15 +33,14 @@ void copyFile(uint8_t fd)
     uint16_t fileSize = (uint16_t)lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
     if (BUFMAX == 0){
-    	exit(EXIT_SUCCESS);
+    	return;
     } else {
 		char *buf = (char *)malloc(fileSize);
 	    read(fd, buf, fileSize);
 	    write(STDOUT_FILENO, buf, fileSize);
-	    // memset(buf, NULL, fileSize);
 	    free(buf);
     }
-    exit(EXIT_SUCCESS);
+    return;
 }
 
 int main(int argc, char *argv[])
@@ -52,9 +51,10 @@ int main(int argc, char *argv[])
         return(0);
 
     } else {
-        for(uint8_t i = 1; i <= argc; i++) {
+        for(uint8_t i = 1; i < argc; i++) {
             if(strcmp("-", argv[i]) == 0) {
                 // no file take input from stdin
+                copyFile(STDIN_FILENO);
             } else {
                 char *path = getPath(argv[i]);
                 uint8_t fd = open(path, O_RDWR);
