@@ -28,27 +28,33 @@ char *getPath(char *filename)
 
 void copyFile(uint8_t fd)
 {
-    // read stdin ONCE
+	// read file
     uint16_t fileSize = (uint16_t)lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    if(fileSize == 0) {
-        return;
+    int EOFFlag = getchar();
+    if(EOFFlag == EOF) {
+        exit(EXIT_SUCCESS);
     } else {
-    	uint16_t residualBytes = fileSize;
+        uint16_t residualBytes = fileSize;
         do {
-        	if(residualBytes > BUFMAX){
-        		char *buf = (char *)malloc(BUFMAX);
-        		read(fd, buf, BUFMAX);
-	        	write(STDOUT_FILENO, buf, BUFMAX);
-	           	free(buf);
-        	} else {
-        		char *buf = (char *)malloc(residualBytes);
-        		read(fd, buf, residualBytes);
-	        	write(STDOUT_FILENO, buf, residualBytes);
-           		free(buf);
-        	}
-        	residualBytes = fileSize - (uint16_t)lseek(fd, 0, SEEK_CUR);
-        } while (residualBytes > 0);
+            if(residualBytes > BUFMAX) {
+                /* rest of file is larger than BUFMAX
+                use BUFMAX as buffer size */
+                char *buf = (char *)malloc(BUFMAX);
+                read(fd, buf, BUFMAX);
+                write(STDOUT_FILENO, buf, BUFMAX);
+                free(buf);
+            } else {
+                /* remaining file is smaller than BUFMAX
+                use remaining byte size as buffer */
+                char *buf = (char *)malloc(residualBytes);
+                read(fd, buf, residualBytes);
+                write(STDOUT_FILENO, buf, residualBytes);
+                free(buf);
+            }
+            residualBytes = fileSize - (uint16_t)lseek(fd, 0, SEEK_CUR);
+            // get rest of file
+        } while(residualBytes > 0);
     }
     return;
 }
@@ -63,11 +69,12 @@ int main(int argc, char *argv[])
     } else {
         for(uint8_t i = 1; i < argc; i++) {
             if(strcmp("-", argv[i]) == 0) {
-                // no file take input from stdin
+                // take input from stdin
                 copyFile(STDIN_FILENO);
             } else {
+            	// copy from file
                 char *path = getPath(argv[i]);
-                uint8_t fd = open(path, O_RDWR);
+                uint8_t fd = open(path, O_RDONLY);
                 copyFile(fd);
                 close(fd);
                 free(path);
