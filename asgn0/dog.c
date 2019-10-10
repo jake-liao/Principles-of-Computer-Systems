@@ -2,14 +2,14 @@
 CSE130 	Prof. Miller 		pa0		dog.c
 hsliao	Jake Hsueh-Yu Liao	1551558
 /------------------------------------------------------------------------------*/
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
-#define BUFMAX 32000
+#define BUFMAX 32768
 
 /*
 file desciptor Macro
@@ -26,19 +26,29 @@ char *getPath(char *filename)
     return path;
 }
 
-
 void copyFile(uint8_t fd)
 {
     // read stdin ONCE
     uint16_t fileSize = (uint16_t)lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    if (BUFMAX == 0){
-    	return;
+    if(fileSize == 0) {
+        return;
     } else {
-		char *buf = (char *)malloc(fileSize);
-	    read(fd, buf, fileSize);
-	    write(STDOUT_FILENO, buf, fileSize);
-	    free(buf);
+    	uint16_t residualBytes = fileSize;
+        do {
+        	if(residualBytes > BUFMAX){
+        		char *buf = (char *)malloc(BUFMAX);
+        		read(fd, buf, BUFMAX);
+	        	write(STDOUT_FILENO, buf, BUFMAX);
+	           	free(buf);
+        	} else {
+        		char *buf = (char *)malloc(residualBytes);
+        		read(fd, buf, residualBytes);
+	        	write(STDOUT_FILENO, buf, residualBytes);
+           		free(buf);
+        	}
+        	residualBytes = fileSize - (uint16_t)lseek(fd, 0, SEEK_CUR);
+        } while (residualBytes > 0);
     }
     return;
 }
@@ -46,9 +56,9 @@ void copyFile(uint8_t fd)
 int main(int argc, char *argv[])
 {
     if(argc == 1) {
-        // not file, take input from stdin
+        // no file, take input from stdin
         copyFile(STDIN_FILENO);
-        return(0);
+        return (0);
 
     } else {
         for(uint8_t i = 1; i < argc; i++) {
