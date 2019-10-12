@@ -8,7 +8,7 @@ CXXFLAGS=-std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -Og
 _submit_CXXFLAGS = -std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -O2
 LDFLAGS =
 CXX 	= clang++
-SOURCES = $(EXEBIN).c
+SOURCES = $(EXEBIN).cpp
 OBJECTS = $(EXEBIN).o
 HEADERS = $(ADT).h
 SUBMIT = submit cmps101-pt.u19 $(ASNGMNT)

@@ -11,73 +11,72 @@ hsliao	Jake Hsueh-Yu Liao	1551558
 #include <unistd.h>
 #define BUFMAX 32768
 
-/*
-file desciptor Macro
-0 -> stdin -> STDIN_FILENO
-1 -> stdout
-2 -> stderr
-*/
-
-char *getPath(char *filename)
+/* copyFile(uint8_t fd) 
+Copies file depending on the size, do-while loop
+continues while there are still characters to be
+read */
+void copyFile(char* file)
 {
-    char *path = (char *)malloc(sizeof(filename) + 2);
-    strcpy(path, "./");
-    strcat(path, filename);
-    return path;
-}
-
-void copyFile(uint8_t fd)
-{
-    // read file
+    int16_t fd = open(file, O_RDONLY);
+    if (fd == -1){
+        char *errMsg = (char*)malloc(200);
+        sprintf(errMsg, "cat: %s: No such file or directory", file);
+        write(STDOUT_FILENO, errMsg, 100);
+    }
     uint16_t fileSize = (uint16_t)lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    uint16_t residualBytes = fileSize;
+    uint16_t remainingBytes = fileSize;
     do {
-        if(residualBytes > BUFMAX) {
+        if(remainingBytes > BUFMAX) {
             /* rest of file is larger than BUFMAX
             use BUFMAX as buffer size */
             char *buf = (char *)malloc(BUFMAX);
             read(fd, buf, BUFMAX);
-            write(STDOUT_FILENO, buf, BUFMAX);
-            memset(buf, 0, BUFMAX);
+            write(STDOUT_FILENO, buf, BUFMAX);          
             free(buf);
+
         } else {
             /* remaining file is smaller than BUFMAX
             use remaining byte size as buffer */
-            char *buf = (char *)malloc(residualBytes);
-            read(fd, buf, residualBytes);
-            write(STDOUT_FILENO, buf, residualBytes);
-            memset(buf, 0, residualBytes);
+            char *buf = (char *)malloc(remainingBytes);
+            read(fd, buf, remainingBytes);
+            write(STDOUT_FILENO, buf, remainingBytes);
             free(buf);
         }
-        residualBytes = fileSize - (uint16_t)lseek(fd, 0, SEEK_CUR);
-        // get rest of file
-    } while(residualBytes > 0);
+        remainingBytes = fileSize - (uint16_t)lseek(fd, 0, SEEK_CUR);
+    } while(remainingBytes > 0);
+    close(fd);
     return;
+}
+/* copySTDIN() 
+Copies file from stdin, do-while loop
+allows input until ^D followed by ^D*/
+void copySTDIN()
+{
+    uint16_t size;
+    do {
+        char *buf = (char *)malloc(BUFMAX);
+        size = read(0, buf, BUFMAX);
+        write(STDOUT_FILENO, buf, BUFMAX); 
+
+    } while(size > 0);
+    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char *argv[])
 {
     if(argc == 1) {
         // no file, take input from stdin
-        copyFile(STDIN_FILENO);
-
-        exit(EXIT_SUCCESS);
+        copySTDIN();
 
     } else {
         for(uint8_t i = 1; i < argc; i++) {
             if(strcmp("-", argv[i]) == 0) {
                 // take input from stdin
-                while(getchar() != EOF) {
-                    copyFile(STDIN_FILENO);
-                }
+                copySTDIN();
             } else {
                 // copy from file
-                char *path = getPath(argv[i]);
-                uint8_t fd = open(path, O_RDONLY);
-                copyFile(fd);
-                close(fd);
-                free(path);
+                copyFile(argv[i]);
             }
         }
     }
