@@ -6,6 +6,7 @@ hsliao	Jake Hsueh-Yu Liao	1551558
 #include <cstdlib>
 #include <err.h>
 #include <fcntl.h>
+#include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -15,14 +16,15 @@ hsliao	Jake Hsueh-Yu Liao	1551558
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <string>
 #define ERR -1
 #define BUFMAX 32768
-#define STATUSMAX 11
 #define HEADERMAX 4096
 
 void handle_client(int8_t soc_fd) {
   uint8_t buffer[BUFMAX] = {0};
   uint8_t header[HEADERMAX] = {0};
+  uint8_t headerSize = 0;
   char command[4] = {0};
   char filename[27] = {0};
   char data[HEADERMAX] = {0};
@@ -30,43 +32,47 @@ void handle_client(int8_t soc_fd) {
   read(soc_fd, (char *)buffer, sizeof(buffer));
   sscanf((char *)buffer, "%s %s %*s %*s %*s %*s %*s %*s %*s %d %s", command,
          filename, &size, data);
-  strcpy((char *)header, "HTTP/1.1 ");
+  memset(buffer, 0, BUFMAX);
   if (strcmp(filename, "/") == 0 || strlen(filename) != 27) {
-    strcat((char *)header, "403 Forbidden\r\nContent-Length: 0\r\n");
-
+    strcat((char *)header, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+    headerSize = 45;
   } else if (strcmp(command, "PUT") == 0) {
     if (access(filename, W_OK) == 0) {
       remove(filename);
     }
     int8_t fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR);
     if (fd == ERR) {
-      //
-      strcat((char *)header, "500 Internal Server Error\r\n");
+      headerSize = 38;
+      strcat((char *)header, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
     } else {
       write(fd, data, sizeof(data));
-      strcat((char *)header, "201 Created\r\nContent-Length: 0\r\n");
+      headerSize = 43;
+      strcat((char *)header, "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n");
     }
 
   } else if (strcmp(command, "GET") == 0) {
     int8_t fd = open(filename, O_RDONLY);
     if (fd == ERR) {
-      // file don't exist
-      strcat((char *)header, "404 Not Found\r\n");
+      headerSize = 26;
+      strcat((char *)header, "HTTP/1.1 404 Not Found\r\n\r\n");
     } else {
       uint8_t fileSize = lseek(fd, 0, SEEK_END);
       lseek(fd, 0, 0);
       char fileData[fileSize];
-      strcat((char *)header, "200 OK\r\n");
       read(fd, fileData, fileSize);
       close(fd);
-      sprintf((char *)buffer, "Content-Length: %hhu\r\n%s\r\n", fileSize,
+      headerSize = log10 (fileSize) + 1 + 37 + fileSize;
+      int8_t dig = log10 (fileSize) + 1;
+      printf("headersize:%d\nlog+1:%d\n", headerSize, dig);
+      sprintf((char *)buffer, "HTTP/1.1 200 OK\r\nContent-Length: %hhu\r\n\r\n%s\r\n", fileSize,
               fileData);
       strcat((char *)header, (char *)buffer);
     }
   } else {
-    strcat((char *)header, "403 Forbidden\r\n");
+  	headerSize = 24;
+    strcat((char *)header, "HTTP/1.1 403 Forbidden\r\n");
   }
-  if (send(soc_fd, (char *)header, HEADERMAX, 0) == ERR)
+  if (send(soc_fd, (char *)header, headerSize, 0) == ERR)
     err(1, "send() failed");
   return;
 }
