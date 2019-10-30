@@ -10,3 +10,7 @@ README.md
 DESIGN.pdf
 httpserver.cpp
 Makefile
+
+Known Issues:
+Large files does not work. 
+Not all http error codes were implemented

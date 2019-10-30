@@ -30,19 +30,19 @@ void handle_client(int8_t soc_fd) {
   int8_t fd;
   char command[4] = {0};
   char filename[27] = {0};
-  char* substring_start = nullptr;
-  char* substring_end = nullptr;
+  char *substring_start = nullptr;
+  char *substring_end = nullptr;
   int size = 0;
   read(soc_fd, (char *)buffer, sizeof(buffer));
-  //get content-size line
-  substring_start = strstr((char*) buffer, "Content-Length: ");
-  if (substring_start != nullptr){
+  // get content-size line
+  substring_start = strstr((char *)buffer, "Content-Length: ");
+  if (substring_start != nullptr) {
     substring_end = strstr(substring_start, "\r");
     int sub_len = substring_end - substring_start - 16;
     char cont_len_substr[sub_len];
     strncpy(cont_len_substr, substring_start + 16, sub_len);
     size = atoi(cont_len_substr);
-    if (size > 0){
+    if (size > 0) {
       read(soc_fd, (char *)payload, sizeof(payload));
     }
   }
@@ -61,18 +61,17 @@ void handle_client(int8_t soc_fd) {
       headerSize = 38;
       strcat((char *)header, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
     } else {
-      if (write(fd, payload, size) == ERR){
+      if (write(fd, payload, size) == ERR) {
         strcat((char *)header, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
       } else {
         headerSize = 43;
         strcat((char *)header,
-             "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n");
+               "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n");
         close(fd);
       }
-
     }
 
-  } else if (strcmp(command , "GET") == 0) {
+  } else if (strcmp(command, "GET") == 0) {
     fd = open(filename, O_RDONLY);
     if (fd == ERR) {
       headerSize = 26;
@@ -81,7 +80,6 @@ void handle_client(int8_t soc_fd) {
       struct stat sb;
       stat(filename, &sb);
       payloadSize = sb.st_size;
-      printf("payloadSize:%lld\n", payloadSize);
       headerSize = log10(payloadSize) + 1 + 37;
       sprintf((char *)header, "HTTP/1.1 200 OK\r\nContent-Length: %ld\r\n\r\n",
               sb.st_size);
@@ -93,23 +91,21 @@ void handle_client(int8_t soc_fd) {
 
   if (send(soc_fd, header, headerSize, 0) == ERR)
     err(1, "send() failed");
-  while (payloadSize > (int64_t)BUFMAX){
+  while (payloadSize > (int64_t)BUFMAX) {
     read(fd, payload, BUFMAX);
     if (send(soc_fd, payload, BUFMAX, 0) == ERR)
       err(1, "send() failed");
     payloadSize = payloadSize - (int64_t)BUFMAX;
-    printf("payloadsize:%lld\n", payloadSize);
     if (payloadSize == 0)
       close(fd);
   }
-  if (payloadSize > 0){
+  if (payloadSize > 0) {
     read(fd, payload, payloadSize);
     if (send(soc_fd, payload, payloadSize, 0) == ERR)
       err(1, "send() failed");
     close(fd);
     payloadSize = payloadSize - payloadSize;
   }
-  printf("payloadSize:%ld\n", payloadSize);
   return;
 }
 
