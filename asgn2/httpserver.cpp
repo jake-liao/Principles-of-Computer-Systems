@@ -31,10 +31,10 @@ pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t full = PTHREAD_COND_INITIALIZER;
 uint8_t active_threads = 0;
 uint8_t waiting_threads = 0;
-int8_t CR[BUFMAX] = {EMPTY};
-uint8_t thread_state[BUFMAX] = {WAITING};
+int8_t CR[BUFMAX] = { EMPTY };
+uint8_t thread_state[BUFMAX] = { WAITING };
 
-void *worker(void* id);
+void *worker(void *id);
 void handle_client(int8_t soc_fd);
 int8_t socket_setup(uint8_t argc, char *address, char *port);
 
@@ -59,19 +59,17 @@ int main(int argc, char *argv[])
     }
     if(thread_count < 1)
         err(1, "Cannot run with less than 1 thread\n");
-    if(optind + 2 != argc)
+    if(optind + 1 >= argc)
         err(1, "invalid argument(s)\n");
 
     // socket_setup
     int8_t socket = socket_setup(argc, argv[optind], argv[optind + 1]);
-    printf("socket success\n");
     // create threads
-    pthread_t* thread_pool = (pthread_t*) malloc(sizeof(pthread_t)* thread_count);
+    pthread_t *thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * thread_count);
     uint8_t n;
     printf("thread_count:%d\n", thread_count);
-    for ( n = 0; n < thread_count; ++n){
-      pthread_create(&thread_pool[n], NULL, worker, NULL);
-      printf("complete thread %d\n", n);
+    for(n = 0; n < thread_count; ++n) {
+        pthread_create(&thread_pool[n], NULL, worker, NULL);
     }
     printf("prep success\n");
     // dispatcher
@@ -80,14 +78,15 @@ int main(int argc, char *argv[])
         int8_t acc_soc;
         if((acc_soc = accept(socket, NULL, NULL)) == ERR)
             err(1, "accept() failure");
-
         pthread_mutex_lock(&mutex);
-        while (active_threads == thread_count){
-          pthread_cond_wait(&empty, &mutex);
+        while(active_threads == thread_count) {
+            pthread_cond_wait(&empty, &mutex);
         }
-        for ( i = 0 ; i< thread_count; ++ i){
-          if (thread_state[i] == WAITING) break;
+        for(i = 0; i < thread_count; ++i) {
+            if(thread_state[i] == WAITING)
+                break;
         }
+        printf("Handing off work to Worker %d\n", i);
         CR[i] = acc_soc;
         ++active_threads;
         thread_state[i] = WORKING;
@@ -97,25 +96,27 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-void *worker(void* id){
-  uint8_t i = *(uint8_t*) (&id);
-  uint8_t soc;
-  while(1){
-    pthread_mutex_lock(&mutex);
-
-    while (thread_state[i] == WAITING){
-      ++waiting_threads;
-      pthread_cond_wait(&full, &mutex);
-      --waiting_threads;
+void *worker(void *id)
+{
+    uint8_t i = *(uint8_t *)(&id);
+    uint8_t soc;
+    while(1) {
+        pthread_mutex_lock(&mutex);
+        printf("Worker %d waiting for work\n", i);
+        while(thread_state[i] == WAITING) {
+            ++waiting_threads;
+            pthread_cond_wait(&full, &mutex);
+            --waiting_threads;
+        }
+        printf("Worker %d working\n", i);
+        soc = CR[i];
+        handle_client(soc);
+        CR[i] = EMPTY;
+        thread_state[i] = thread_state[i] - 1;
+        --active_threads;
+        pthread_cond_signal(&empty);
+        pthread_mutex_unlock(&mutex);
     }
-    soc = CR[i];
-    handle_client(soc);
-    CR[i] = EMPTY;
-    thread_state[i] = thread_state[i] -1;
-    --active_threads;
-    pthread_cond_signal(&empty);
-    pthread_mutex_unlock(&mutex);
-  }
 }
 
 int8_t socket_setup(uint8_t argc, char *address, char *port)
@@ -164,9 +165,8 @@ void handle_client(int8_t soc_fd)
         char cont_len_substr[sub_len];
         strncpy(cont_len_substr, substring_start + 16, sub_len);
         size = atoi(cont_len_substr);
-        if(size > 0) {
+        if(size > 0)
             read(soc_fd, (char *)payload, sizeof(payload));
-        }
     }
     sscanf((char *)buffer, "%s %s ", command, filename);
 
@@ -174,9 +174,8 @@ void handle_client(int8_t soc_fd)
         strcat((char *)header, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
         headerSize = 45;
     } else if(strcmp(command, "PUT") == 0) {
-        if(access(filename, W_OK) == 0) {
+        if(access(filename, W_OK) == 0)
             remove(filename);
-        }
         fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
         if(fd == ERR) {
             headerSize = 38;
