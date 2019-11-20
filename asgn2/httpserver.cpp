@@ -10,6 +10,7 @@ hsliao	Jake Hsueh-Yu Liao	1551558
 #include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <string>
@@ -19,8 +20,127 @@ hsliao	Jake Hsueh-Yu Liao	1551558
 #include <sys/un.h>
 #include <unistd.h>
 #define ERR -1
+#define EMPTY -1
+#define WORKING 1
+#define WAITING 0
 #define BUFMAX 32768
 #define HEADERMAX 4096
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
+pthread_cond_t full = PTHREAD_COND_INITIALIZER;
+uint8_t active_threads = 0;
+uint8_t waiting_threads = 0;
+int8_t CR[BUFMAX] = {EMPTY};
+uint8_t thread_state[BUFMAX] = {WAITING};
+
+void *worker(void* id);
+void handle_client(int8_t soc_fd);
+int8_t socket_setup(uint8_t argc, char *address, char *port);
+
+int main(int argc, char *argv[])
+{
+    // argument handle
+    if(argc < 2 || argc > 7)
+        err(1, "incorrect argument count\n argc: %d", argc);
+    int8_t opt;
+    uint8_t Nflag = 0, lflag = 0, thread_count = 4;
+    while((opt = getopt(argc, argv, "N:l")) != ERR) {
+        switch(opt) {
+            case 'N':
+                ++Nflag;
+                if(optarg)
+                    thread_count = atoi(optarg);
+            case 'l':
+                ++lflag;
+            default:
+                break;
+        }
+    }
+    if(thread_count < 1)
+        err(1, "Cannot run with less than 1 thread\n");
+    if(optind + 2 != argc)
+        err(1, "invalid argument(s)\n");
+
+    // socket_setup
+    int8_t socket = socket_setup(argc, argv[optind], argv[optind + 1]);
+    printf("socket success\n");
+    // create threads
+    pthread_t* thread_pool = (pthread_t*) malloc(sizeof(pthread_t)* thread_count);
+    uint8_t n;
+    printf("thread_count:%d\n", thread_count);
+    for ( n = 0; n < thread_count; ++n){
+      pthread_create(&thread_pool[n], NULL, worker, NULL);
+      printf("complete thread %d\n", n);
+    }
+    printf("prep success\n");
+    // dispatcher
+    while(1) {
+        uint8_t i;
+        int8_t acc_soc;
+        if((acc_soc = accept(socket, NULL, NULL)) == ERR)
+            err(1, "accept() failure");
+
+        pthread_mutex_lock(&mutex);
+        while (active_threads == thread_count){
+          pthread_cond_wait(&empty, &mutex);
+        }
+        for ( i = 0 ; i< thread_count; ++ i){
+          if (thread_state[i] == WAITING) break;
+        }
+        CR[i] = acc_soc;
+        ++active_threads;
+        thread_state[i] = WORKING;
+        pthread_cond_broadcast(&full);
+        pthread_mutex_unlock(&mutex);
+    }
+    return 0;
+}
+
+void *worker(void* id){
+  uint8_t i = *(uint8_t*) (&id);
+  uint8_t soc;
+  while(1){
+    pthread_mutex_lock(&mutex);
+
+    while (thread_state[i] == WAITING){
+      ++waiting_threads;
+      pthread_cond_wait(&full, &mutex);
+      --waiting_threads;
+    }
+    soc = CR[i];
+    handle_client(soc);
+    CR[i] = EMPTY;
+    thread_state[i] = thread_state[i] -1;
+    --active_threads;
+    pthread_cond_signal(&empty);
+    pthread_mutex_unlock(&mutex);
+  }
+}
+
+int8_t socket_setup(uint8_t argc, char *address, char *port)
+{
+    struct addrinfo *addrs, hints = {};
+    int enable = 1;
+    int8_t N = 16;
+    int8_t main_socket;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    if(argc == 3) {
+        getaddrinfo(address, port, &hints, &addrs);
+    } else {
+        getaddrinfo(address, "80", &hints, &addrs);
+    }
+    if((main_socket = socket(addrs->ai_family, addrs->ai_socktype, addrs->ai_protocol)) == ERR)
+        err(1, "socket() failure");
+    if(setsockopt(main_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) == ERR)
+        err(1, "setsockopt() failure");
+    if(bind(main_socket, addrs->ai_addr, addrs->ai_addrlen) == ERR)
+        err(1, "bind() failure");
+    if(listen(main_socket, N) == ERR)
+        err(1, "listen() failure");
+    return main_socket;
+}
 
 void handle_client(int8_t soc_fd)
 {
@@ -106,65 +226,4 @@ void handle_client(int8_t soc_fd)
         payloadSize = payloadSize - payloadSize;
     }
     return;
-}
-
-int8_t socket_setup(uint8_t argc, char *address, char *port)
-{
-    struct addrinfo *addrs, hints = {};
-    int enable = 1;
-    int8_t N = 16;
-    int8_t main_socket;
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    if(argc == 3) {
-        getaddrinfo(address, port, &hints, &addrs);
-    } else {
-        getaddrinfo(address, "80", &hints, &addrs);
-    }
-    if((main_socket = socket(addrs->ai_family, addrs->ai_socktype, addrs->ai_protocol)) == ERR)
-        err(1, "socket() failure");
-    if(setsockopt(main_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) == ERR)
-        err(1, "setsockopt() failure");
-    if(bind(main_socket, addrs->ai_addr, addrs->ai_addrlen) == ERR)
-        err(1, "bind() failure");
-    if(listen(main_socket, N) == ERR)
-        err(1, "listen() failure");
-
-    return acc_soc;
-}
-
-int main(int argc, char *argv[])
-{
-    // argument handle
-    if(argc < 2 || argc > 7)
-        err(1, "incorrect argument count\n argc: %d", argc);
-    int8_t opt;
-    uint8_t Nflag = 0, lflag = 0, thread_count = 4;
-    while((opt = getopt(argc, argv, "N:l")) != ERR) {
-        switch(opt) {
-            case 'N':
-                ++Nflag;
-                if(optarg)
-                    thread_count = atoi(optarg);
-            case 'l':
-                ++lflag;
-            default:
-                break;
-        }
-    }
-    if(thread_count < 1)
-        err(1, "Cannot run with less than 1 thread\n");
-    if(optind + 2 != argc)
-        err(1, "invalid argument(s)\n");
-
-    // socket_setup
-    int8_t socket = socket_setup(argc, argv[optind], argv[optind + 1]);
-    while(1) {
-        int16_t acc_soc;
-        if((acc_soc = accept(main_socket, NULL, NULL)) == ERR)
-            err(1, "accept() failure");
-        handle_client(acc_soc);
-    }
-    
-    return 0;
 }

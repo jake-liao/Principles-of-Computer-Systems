@@ -1,8 +1,8 @@
 # Makefile
 # hsliao Jake Hsueh-Yu Liao 1551558
 EXEBIN  = httpserver
-CXXFLAGS=-std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -Og
-_submit_CXXFLAGS = -std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -O2
+LDFLAGS = -pthread
+CXXFLAGS= -std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -Og -pthread
 CXX 	= clang++
 SOURCES = $(EXEBIN).cpp
 OBJECTS = $(EXEBIN).o
